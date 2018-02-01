@@ -35,16 +35,41 @@ def retrieve_duplicate_ids(vcf_path):
 
 
 def calculate_concordance(duplicate_dictionary, vcf_path):
-    print "Starting iteration"
+    """For each duplicate pair, iterates through all variants in the vcf and calculates concordance/discordance
+    along with reasons for discordance."""
+    # Meanings of gt_types values
+    genotype_dictionary = {0: "hom_ref", 1: "het", 2: "unknown", 3: "hom_alt"}
+    # Sets for discordance reason determination
+    het_hom = set([2, 3])
+    ref_var_het = set([0, 1])
+    ref_var_hom = set([0, 3])
     for ID in duplicate_dictionary:
+        concordant_calls = 0.0
+        discordant_calls = 0.0
+        discordance_reasons = {"no_call": 0, "het_hom": 0, "ref_var": 0}
         vcf = VCF(vcf_path)
         # Subsets the vcf to the samples of interest
         vcf.set_samples(duplicate_dictionary[ID])
         for variant in vcf:
-            # Selects variant sites
-            if not variant.num_hom_ref == 2:
-                pass
-    print "All complete (20)."
+            # Skip if both samples are hom_ref at this location
+            if variant.num_hom_ref == 2:
+                continue
+            genotypes = variant.gt_types
+            set_genotypes = set(genotypes)
+            if genotypes[0] == genotypes[1]:
+                concordant_calls += 1.0
+            else:
+                discordant_calls += 1.0
+                if 2 in set_genotypes:
+                    discordance_reasons["no_call"] += 1
+                elif set_genotypes == het_hom:
+                    discordance_reasons["het_hom"] += 1
+                elif set_genotypes == ref_var_het or set_genotypes == ref_var_hom:
+                    discordance_reasons["ref_var"] += 1
+                
+        concordance = concordant_calls / (concordant_calls + discordant_calls)
+        print concordance
+        print discordance_reasons
 
 
 def main():
