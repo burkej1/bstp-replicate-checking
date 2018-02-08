@@ -50,6 +50,8 @@ def get_individual_vcfs(folder_path):
 
 
 def snp_filter(variant):
+    """SNP filtering thresholds, only prints a warning if a field that shouldn't be missing is missing. MQRankSum
+    and ReadPosRankSum seem to not be calculated relatively often."""
     fail = False
     missing_metric = False
     if variant.QUAL < 30.0:
@@ -86,6 +88,8 @@ def snp_filter(variant):
 
 
 def indel_filter(variant):
+    """Indels filtering thresholds, only prints a warning if a field that shouldn't be missing is missing. 
+    ReadPosRankSum seems to not be calculated relatively often."""
     fail = False
     missing_metric = False
     if variant.QUAL < 30.0:
@@ -112,19 +116,44 @@ def calculate_concordance(vcf_path):
     BSID = re.search(".+\.(BS\d\d\d\d\d\d)\.vcf", vcf_path).group(1)
     concordance_metrics = Concordance(BSID)
     vcf = VCF(vcf_path)
+
+    # Counting the variants filtered
     filtered_snps = 0
     filtered_indels = 0
+
+    # Keeping track of the total variants and plate number on a per-sample basis
+    genotype_dictionary = {0: "hom_ref", 1: "het", 2: "unknown", 3: "hom_alt"}
+    total_vars = {}
+    samples = vcf.samples
+    for sample in samples:
+        platenumber = re.search("_(\d\d\d\d)-", sample).group(1)
+        total_vars[sample] = {"hom_ref": 0, "hom_alt": 0, "unknown": 0, "het": 0, "plate": platenumber}
+
+    if total_vars[samples[0]]["plate"] == total_vars[samples[1]]["plate"]:
+        inter_intra = "Intraplate"
+    else:
+        inter_intra = "Interplate"
+
+    # Iterating through the variants in the vcf and calculating sample concordance
     for variant in vcf:
+        # Statistics pre-filtering (looking for strange amounts of noise)
+        for n, gt in enumerate(variant.gt_types):
+            sample = samples[n]
+            genotype = genotype_dictionary[gt]
+            total_vars[sample][genotype] += 1
         # Filtering, skip if the variant fails filters
         if variant.is_snp:
             if snp_filter(variant) is True:
                 filtered_snps += 1
                 continue
-        if variant.is_indel:
+        elif variant.is_indel:
             if indel_filter(variant) is True:
                 filtered_indels += 1
                 continue
-        # Checking concordance
+        else:
+            print("Not a SNP or Indel, might want to look into this variant.")
+            print(variant)
+        # Checking concordance (post-filtering)
         genotypes = variant.gt_types
         set_genotypes = set(genotypes)
         if genotypes[0] == genotypes[1]:
@@ -132,13 +161,16 @@ def calculate_concordance(vcf_path):
         else:
             concordance_metrics.discordant_calls += 1.0
             concordance_metrics.check_discordance_reason(set_genotypes)
-    print('\n' + BSID)
-    print("Filtered Indels: {indels}\nFiltered SNPs: {snps}".format(indels=filtered_indels, snps=filtered_snps))
-    print(concordance_metrics.calculate_concordance())
-    print("Concordant calls: {conc}\n" \
-          "Discordant calls: {disc}".format(conc=concordance_metrics.concordant_calls, 
-                                            disc=concordance_metrics.discordant_calls))
-    print(concordance_metrics.discordance_reasons)
+    if filtered_snps > 100 or filtered_indels > 100:
+        print('\n' + BSID)
+        print(inter_intra)
+        print("Filtered Indels: {indels}\nFiltered SNPs: {snps}".format(indels=filtered_indels, snps=filtered_snps))
+        print(concordance_metrics.calculate_concordance())
+        print("Concordant calls: {conc}\n" \
+              "Discordant calls: {disc}".format(conc=concordance_metrics.concordant_calls, 
+                                                disc=concordance_metrics.discordant_calls))
+        print(concordance_metrics.discordance_reasons)
+        printvar1 = [print('{}\n'.format(sample) + str(total_vars[sample])) for sample in total_vars]
 
 
 def main():
