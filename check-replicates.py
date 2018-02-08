@@ -51,19 +51,59 @@ def get_individual_vcfs(folder_path):
 
 def snp_filter(variant):
     fail = False
-    qual_f = 30.0
-    qd_f = 2.0
-    dp_f = 10.0
-    mq_f = 30.0
-    sor_f = 3.0
-    mqrs_f = -12.5
-    rprs_f = -8.0
-
+    missing_metric = False
+    if variant.QUAL < 30.0:
+        fail = True
+    if variant.INFO.get('DP') < 10.0 and variant.INFO.get('DP') is not None:
+        fail = True
+    elif variant.INFO.get('DP') is None:
+        print("DP missing")
+        missing_metric = True
+    if variant.INFO.get('QD') < 2.0 and variant.INFO.get('QD') is not None:
+        fail = True
+    elif variant.INFO.get('QD') is None:
+        print("QD missing")
+        missing_metric = True
+    if variant.INFO.get('MQ') < 30.0 and variant.INFO.get('MQ') is not None:
+        fail = True
+    elif variant.INFO.get('MQ') is None:
+        print("MQ missing")
+        missing_metric = True
+    if variant.INFO.get('SOR') > 3.0 and variant.INFO.get('SOR') is not None:
+        fail = True
+    elif variant.INFO.get('SOR') is None:
+        print("SOR missing")
+        missing_metric = True
+    if variant.INFO.get('MQRankSum') < -12.5 and variant.INFO.get('MQRankSum') is not None:
+        fail = True
+    elif variant.INFO.get('MQRankSum') is None:
+        missing_metric = True
+    if variant.INFO.get('ReadPosRankSum') < -8.0 and variant.INFO.get('ReadPosRankSum') is not None:
+        fail = True
+    elif variant.INFO.get('ReadPosRankSum') is None:
+        missing_metric = True
     return fail
 
 
 def indel_filter(variant):
     fail = False
+    missing_metric = False
+    if variant.QUAL < 30.0:
+        fail = True
+    if variant.INFO.get('DP') < 10.0 and variant.INFO.get('DP') is not None:
+        fail = True
+    elif variant.INFO.get('DP') is None:
+        print("DP missing")
+        missing_metric = True
+    if variant.INFO.get('QD') < 2.0 and variant.INFO.get('QD') is not None:
+        fail = True
+    elif variant.INFO.get('QD') is None:
+        print("QD missing")
+        missing_metric = True
+    if variant.INFO.get('ReadPosRankSum') < -20.0 and variant.INFO.get('ReadPosRankSum') is not None:
+        fail = True
+    elif variant.INFO.get('ReadPosRankSum') is None:
+        missing_metric = True
     return fail
 
 
@@ -72,13 +112,17 @@ def calculate_concordance(vcf_path):
     BSID = re.search(".+\.(BS\d\d\d\d\d\d)\.vcf", vcf_path).group(1)
     concordance_metrics = Concordance(BSID)
     vcf = VCF(vcf_path)
+    filtered_snps = 0
+    filtered_indels = 0
     for variant in vcf:
         # Filtering, skip if the variant fails filters
-        if is_snp:
+        if variant.is_snp:
             if snp_filter(variant) is True:
+                filtered_snps += 1
                 continue
-        if is_indel:
+        if variant.is_indel:
             if indel_filter(variant) is True:
+                filtered_indels += 1
                 continue
         # Checking concordance
         genotypes = variant.gt_types
@@ -88,6 +132,8 @@ def calculate_concordance(vcf_path):
         else:
             concordance_metrics.discordant_calls += 1.0
             concordance_metrics.check_discordance_reason(set_genotypes)
+    print('\n' + BSID)
+    print("Filtered Indels: {indels}\nFiltered SNPs: {snps}".format(indels=filtered_indels, snps=filtered_snps))
     print(concordance_metrics.calculate_concordance())
     print("Concordant calls: {conc}\n" \
           "Discordant calls: {disc}".format(conc=concordance_metrics.concordant_calls, 
