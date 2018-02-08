@@ -7,10 +7,12 @@ import numpy as np
 
 #input_vcf_path = sys.argv[1]
 
-vcf_folder_path = "/scratch/vh83/projects/brastrap/run1-7_replicate_pipeline/variants/gatk"
+#vcf_folder_path = "/scratch/vh83/projects/brastrap/run1-7_replicate_pipeline/variants/gatk"
+vcf_folder_path = sys.argv[1]
 if vcf_folder_path.endswith('/'):
     vcf_folder_path = vcf_folder_path.rstrip('/')
 
+output_file = "replicate_metrics.tsv"
 
 class Concordance(object):
     """Class to keep track of concordance metrics between two samples."""
@@ -21,7 +23,7 @@ class Concordance(object):
         self.concordant_calls = 0.0
         self.discordant_calls = 0.0
         # Sets for discordance reason determination
-        self.het_hom = set([2, 3])
+        self.het_hom = set([1, 3])
         self.ref_var_het = set([0, 1])
         self.ref_var_hom = set([0, 3])
         self.discordance_reasons = {"no_call": 0, "het_hom": 0, "ref_var": 0}
@@ -34,6 +36,9 @@ class Concordance(object):
             self.discordance_reasons["ref_var"] += 1
         elif 2 in set_genotypes:
             self.discordance_reasons["no_call"] += 1
+        else:
+            print("No discordance reason found")
+            print(set_genotypes)
 
     def calculate_concordance(self):
         try:
@@ -111,7 +116,7 @@ def indel_filter(variant):
     return fail
 
 
-def calculate_concordance(vcf_path):
+def calculate_concordance(vcf_path, outputfile):
     """Calculates concordance for vcf samples in an individual vcf."""
     BSID = re.search(".+\.(BS\d\d\d\d\d\d)\.vcf", vcf_path).group(1)
     concordance_metrics = Concordance(BSID)
@@ -161,22 +166,42 @@ def calculate_concordance(vcf_path):
         else:
             concordance_metrics.discordant_calls += 1.0
             concordance_metrics.check_discordance_reason(set_genotypes)
-    if filtered_snps > 100 or filtered_indels > 100:
-        print('\n' + BSID)
-        print(inter_intra)
-        print("Filtered Indels: {indels}\nFiltered SNPs: {snps}".format(indels=filtered_indels, snps=filtered_snps))
-        print(concordance_metrics.calculate_concordance())
-        print("Concordant calls: {conc}\n" \
-              "Discordant calls: {disc}".format(conc=concordance_metrics.concordant_calls, 
-                                                disc=concordance_metrics.discordant_calls))
-        print(concordance_metrics.discordance_reasons)
-        printvar1 = [print('{}\n'.format(sample) + str(total_vars[sample])) for sample in total_vars]
+    outputline = "{bsid}\t{samples}\t{interorintra}\t{concordance}%\t{filteredindels}\t{filteredsnps}\t" \
+                 "{concordantcalls}\t{discordantcalls}\t{het_hom}\t{hom_var}\t{call_nocall}\t" \
+                 "{unf_het}\t{unf_homref}\t{unf_homalt}\t{unf_nocall}\n" \
+                 .format(bsid=BSID, 
+                         samples="{s1}, {s2}".format(s1=samples[0], s2=samples[1]),
+                         interorintra=inter_intra, 
+                         concordance=str(round(concordance_metrics.calculate_concordance() * 100, 2)), 
+                         filteredindels=filtered_indels, 
+                         filteredsnps=filtered_snps, 
+                         concordantcalls=concordance_metrics.concordant_calls,
+                         discordantcalls=concordance_metrics.discordant_calls, 
+                         het_hom=concordance_metrics.discordance_reasons["het_hom"], 
+                         hom_var=concordance_metrics.discordance_reasons["ref_var"], 
+                         call_nocall=concordance_metrics.discordance_reasons["no_call"], 
+                         unf_het="{s1}//{s2}".format(s1=total_vars[samples[0]]["het"], 
+                                                    s2=total_vars[samples[1]]["het"]), 
+                         unf_homref="{s1}//{s2}".format(s1=total_vars[samples[0]]["hom_ref"], 
+                                                       s2=total_vars[samples[1]]["hom_ref"]), 
+                         unf_homalt="{s1}//{s2}".format(s1=total_vars[samples[0]]["hom_alt"], 
+                                                       s2=total_vars[samples[1]]["hom_alt"]), 
+                         unf_nocall="{s1}//{s2}".format(s1=total_vars[samples[0]]["unknown"], 
+                                                       s2=total_vars[samples[1]]["unknown"]))
+    outputfile.write(outputline)
 
 
 def main():
     vcf_list = get_individual_vcfs(vcf_folder_path)
-    for vcf in vcf_list:
-        calculate_concordance(vcf)
+    header = "BSID\tSamples\tInter- or Intra-\tConcordance\tFiltered Indels (number removed)\t" \
+             "Filtered SNPs (number removed)\tConcordant Calls\tDiscordant Calls\t" \
+             "Heterozygous vs. Homozygous Alt\tHomozygous Reference vs Variant\tCall vs. No Call\t" \
+             "Unfiltered Het Calls\tUnfiltered Hom Ref Calls\t Unfiltered Hom Alt Calls\t" \
+             "Unfiltered No Calls\n"
+    with open(output_file, 'w') as outputfile:
+        outputfile.write(header)
+        for vcf in vcf_list:
+            calculate_concordance(vcf, outputfile)
 
 
 if __name__ == "__main__":
