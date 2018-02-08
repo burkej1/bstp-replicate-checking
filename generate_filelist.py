@@ -1,28 +1,16 @@
 import sys
 import re
 
-# Positive control always has X4336 in the filename (with 3 exceptions in the ABCFS plates for run 7)
-
 input_file_path = sys.argv[1]
-fail_path = sys.argv[2]
 output_file_path = "pipeline_formatted_filelist.txt"
 
-id_dictionary = {"positive_controls": []}
+id_dictionary = {}
 
-with open(input_file_path, 'r') as input_file, open(fail_path, 'r') as fail_file, open(output_file_path, 'w') as output_file:
-    # Reading the failed files into a set for checking
-    fails = set()
-    for line in fail_file:
-        fails.add(line.rstrip('\n'))
-
+with open(input_file_path, 'r') as input_file, open(output_file_path, 'w') as output_file:
     # Reading filenames into a dictionary
     for line in input_file:
         stripline = line.rstrip('\n')
         if "_R2_" in stripline:  # Save time by only looking at R1 fastqs
-            continue
-
-        if re.match(".*run7.+ABCFS.+H12.+", stripline):  # Checking for positive controls with BS IDs
-            id_dictionary["positive_controls"].append(stripline)
             continue
 
         # Check for a match then add filenames to the dictionary
@@ -33,14 +21,10 @@ with open(input_file_path, 'r') as input_file, open(fail_path, 'r') as fail_file
                 id_dictionary[bs_id].append(stripline)
             else:
                 id_dictionary[bs_id] = [stripline]
-        else:  # If there's no BS ID check if it's a control
-            pc_result = re.search(".+X4336.+", stripline)
-            if pc_result:
-                id_dictionary["positive_controls"].append(stripline) 
 
     replicate_dictionary = {}
     for ID in id_dictionary:
-        if len(id_dictionary[ID]) > 1 and ID != "positive_controls":
+        if len(id_dictionary[ID]) > 1:
             is_real_replicate = False
             for filename in id_dictionary[ID]:
                 # Making sure at least one of the files is tagged as a replicate
@@ -59,21 +43,27 @@ with open(input_file_path, 'r') as input_file, open(fail_path, 'r') as fail_file
     #             print filename
     #     print '\n'
 
-    print len(id_dictionary["positive_controls"])
-
     # Writing replicates to an output file to cat to the pipeline, or create symlinks
     for bsid in replicate_dictionary:
         for replicate in replicate_dictionary[bsid]:
-            if replicate in fails:
-                print "FAIL"
-                print replicate
             output_file.write(replicate + '\n')
             output_file.write(re.sub("R1", "R2", replicate) + '\n')
 
-    for control in id_dictionary["positive_controls"]:
-        if control in fails:
-            print "FAIL"
-            print control
-        output_file.write(control + '\n')
-        output_file.write(re.sub("R1", "R2", control) + '\n')
 
+
+# # Controls, removed for now
+#         if re.match(".*run7.+ABCFS.+H12.+", stripline):  # Checking for positive controls with BS IDs
+#             id_dictionary["positive_controls"].append(stripline)
+#             continue
+# 
+#         else:  # If there's no BS ID check if it's a control
+#             pc_result = re.search(".+X4336.+", stripline)
+#             if pc_result:
+#                 id_dictionary["positive_controls"].append(stripline) 
+# "positive_controls": []
+#     for control in id_dictionary["positive_controls"]:
+#         if control in fails:
+#             print "FAIL"
+#             print control
+#         output_file.write(control + '\n')
+#         output_file.write(re.sub("R1", "R2", control) + '\n')
