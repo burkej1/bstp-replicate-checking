@@ -4,13 +4,18 @@ import sys
 import os
 import re
 import numpy as np
+import argparse
 
-#input_vcf_path = sys.argv[1]
+def parse_args():
+    parser = argparse.ArgumentParser(description="Takes a folder location containing vcfs with paired " \
+                                                 "samples, calculates concordance and prints to a given " \
+                                                 "output file. Assumes vcfs to be named .merged.BSID.vcf")
+    parser.add_argument("-i", "--inputfolder", help="Folder containing vcf files.", required=True)
+    parser.add_argument("-o", "--outputtsv", help="Location to write the summary tsv.", required=True)
+    return vars(parser.parse_args())
+
 
 #vcf_folder_path = "/scratch/vh83/projects/brastrap/run1-7_replicate_pipeline/variants/gatk"
-vcf_folder_path = sys.argv[1]
-if vcf_folder_path.endswith('/'):
-    vcf_folder_path = vcf_folder_path.rstrip('/')
 
 output_file = "replicate_metrics.tsv"
 
@@ -50,7 +55,7 @@ class Concordance(object):
 
 def get_individual_vcfs(folder_path):
     folder_contents = os.listdir(folder_path)
-    vcf_list = [folder_path + '/' + vcf for vcf in folder_contents if re.match(".+\.BS\d\d\d\d\d\d\.vcf$", vcf)]
+    vcf_list = [folder_path + '/' + vcf for vcf in folder_contents if re.match(".+\.merged\.BS\d\d\d\d\d\d\.vcf$", vcf)]
     return vcf_list
 
 
@@ -118,7 +123,7 @@ def indel_filter(variant):
 
 def calculate_concordance(vcf_path, outputfile):
     """Calculates concordance for vcf samples in an individual vcf."""
-    BSID = re.search(".+\.(BS\d\d\d\d\d\d)\.vcf", vcf_path).group(1)
+    BSID = re.search(".+\.merged\.(BS\d\d\d\d\d\d)\.vcf", vcf_path).group(1)
     concordance_metrics = Concordance(BSID)
     vcf = VCF(vcf_path)
 
@@ -148,11 +153,11 @@ def calculate_concordance(vcf_path, outputfile):
             total_vars[sample][genotype] += 1
         # Filtering, skip if the variant fails filters
         if variant.is_snp:
-            if snp_filter(variant) is True:
+            if variant.FILTER is not None:
                 filtered_snps += 1
                 continue
         elif variant.is_indel:
-            if indel_filter(variant) is True:
+            if variant.FILTER is not None:
                 filtered_indels += 1
                 continue
         else:
@@ -192,7 +197,10 @@ def calculate_concordance(vcf_path, outputfile):
 
 
 def main():
-    vcf_list = get_individual_vcfs(vcf_folder_path)
+    args = parse_args()
+    if args["inputfolder"].endswith('/'):
+        args["inputfolder"] = args["inputfolder"].rstrip('/')
+    vcf_list = get_individual_vcfs(args["inputfolder"])
     header = "BSID\tSamples\tInter- or Intra-\tConcordance\tFiltered Indels (number removed)\t" \
              "Filtered SNPs (number removed)\tConcordant Calls\tDiscordant Calls\t" \
              "Heterozygous vs. Homozygous Alt\tHomozygous Reference vs Variant\tCall vs. No Call\t" \
