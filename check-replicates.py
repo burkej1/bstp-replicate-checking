@@ -17,8 +17,6 @@ def parse_args():
 
 #vcf_folder_path = "/scratch/vh83/projects/brastrap/run1-7_replicate_pipeline/variants/gatk"
 
-output_file = "replicate_metrics.tsv"
-
 class Concordance(object):
     """Class to keep track of concordance metrics between two samples."""
     def __init__(self, samples):
@@ -206,7 +204,7 @@ def main():
              "Heterozygous vs. Homozygous Alt\tHomozygous Reference vs Variant\tCall vs. No Call\t" \
              "Unfiltered Het Calls\tUnfiltered Hom Ref Calls\t Unfiltered Hom Alt Calls\t" \
              "Unfiltered No Calls\n"
-    with open(output_file, 'w') as outputfile:
+    with open(args["outputtsv"], 'w') as outputfile:
         outputfile.write(header)
         for vcf in vcf_list:
             calculate_concordance(vcf, outputfile)
